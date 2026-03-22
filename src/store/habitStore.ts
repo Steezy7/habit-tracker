@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Category = "health" | "study" | "fitness" | "mindfulness" | "productivity" | "other";
 export type Frequency = "daily" | "weekly" | "custom";
@@ -9,11 +9,11 @@ export interface Habit {
   name: string;
   category: Category;
   frequency: Frequency;
-  customDays?: number[]; // 0=Sun..6=Sat
+  customDays?: number[];
   timeOfDay?: string;
   reminderTime?: string;
   createdAt: string;
-  completions: string[]; // ISO date strings
+  completions: string[];
   streak: number;
   longestStreak: number;
   order: number;
@@ -24,10 +24,12 @@ export interface HabitState {
   xp: number;
   level: number;
   totalCompleted: number;
-  addHabit: (habit: Omit<Habit, "id" | "createdAt" | "completions" | "streak" | "longestStreak" | "order">) => void;
-  updateHabit: (id: string, updates: Partial<Habit>) => void;
-  deleteHabit: (id: string) => void;
-  toggleCompletion: (id: string, date: string) => void;
+  loading: boolean;
+  fetchHabits: () => Promise<void>;
+  addHabit: (habit: Omit<Habit, "id" | "createdAt" | "completions" | "streak" | "longestStreak" | "order">) => Promise<void>;
+  updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
+  deleteHabit: (id: string) => Promise<void>;
+  toggleCompletion: (id: string, date: string) => Promise<void>;
   reorderHabits: (habits: Habit[]) => void;
 }
 
@@ -39,7 +41,6 @@ const XP_STREAK_BONUS = [
 ];
 
 function calcLevel(xp: number): number {
-  // Each level requires more XP: level N needs N*100 XP
   let level = 1;
   let remaining = xp;
   while (remaining >= level * 100) {
@@ -66,99 +67,149 @@ function calcStreak(completions: string[], today: string): number {
   return streak;
 }
 
-export const useHabitStore = create<HabitState>()(
-  persist(
-    (set) => ({
-      habits: [],
-      xp: 0,
-      level: 1,
-      totalCompleted: 0,
+async function getUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
 
-      addHabit: (habit) =>
-        set((state) => ({
-          habits: [
-            ...state.habits,
-            {
-              ...habit,
-              id: crypto.randomUUID(),
-              createdAt: new Date().toISOString(),
-              completions: [],
-              streak: 0,
-              longestStreak: 0,
-              order: state.habits.length,
-            },
-          ],
-        })),
+export const useHabitStore = create<HabitState>()((set, get) => ({
+  habits: [],
+  xp: 0,
+  level: 1,
+  totalCompleted: 0,
+  loading: false,
 
-      updateHabit: (id, updates) =>
-        set((state) => ({
-          habits: state.habits.map((h) => (h.id === id ? { ...h, ...updates } : h)),
-        })),
+  fetchHabits: async () => {
+    const userId = await getUserId();
+    if (!userId) return;
+    set({ loading: true });
 
-      deleteHabit: (id) =>
-        set((state) => ({
-          habits: state.habits.filter((h) => h.id !== id),
-        })),
+    const { data: habits } = await supabase
+      .from("habits")
+      .select("*")
+      .eq("user_id", userId)
+      .order("sort_order");
 
-      toggleCompletion: (id, date) =>
-        set((state) => {
-          const habit = state.habits.find((h) => h.id === id);
-          if (!habit) return state;
+    const { data: completions } = await supabase
+      .from("habit_completions")
+      .select("*")
+      .eq("user_id", userId);
 
-          const wasCompleted = habit.completions.includes(date);
-          const newCompletions = wasCompleted
-            ? habit.completions.filter((d) => d !== date)
-            : [...habit.completions, date];
+    if (!habits) { set({ loading: false }); return; }
 
-          const newStreak = calcStreak(newCompletions, date);
-          const newLongest = Math.max(habit.longestStreak, newStreak);
+    const today = getToday();
+    const mappedHabits: Habit[] = habits.map((h) => {
+      const habitCompletions = (completions ?? [])
+        .filter((c) => c.habit_id === h.id)
+        .map((c) => c.completed_date);
+      const streak = calcStreak(habitCompletions, today);
+      return {
+        id: h.id,
+        name: h.name,
+        category: h.category as Category,
+        frequency: h.frequency as Frequency,
+        customDays: h.custom_days ?? undefined,
+        timeOfDay: h.time_of_day ?? undefined,
+        reminderTime: h.reminder_time ?? undefined,
+        createdAt: h.created_at,
+        completions: habitCompletions,
+        streak,
+        longestStreak: streak, // simplified
+        order: h.sort_order,
+      };
+    });
 
-          let xpDelta = wasCompleted ? -XP_PER_COMPLETION : XP_PER_COMPLETION;
-          if (!wasCompleted) {
-            for (const { threshold, bonus } of XP_STREAK_BONUS) {
-              if (newStreak === threshold) xpDelta += bonus;
-            }
-          }
+    const totalCompleted = (completions ?? []).length;
+    const xp = totalCompleted * XP_PER_COMPLETION;
 
-          const newXp = Math.max(0, state.xp + xpDelta);
+    set({
+      habits: mappedHabits,
+      totalCompleted,
+      xp,
+      level: calcLevel(xp),
+      loading: false,
+    });
+  },
 
-          return {
-            habits: state.habits.map((h) =>
-              h.id === id
-                ? { ...h, completions: newCompletions, streak: newStreak, longestStreak: newLongest }
-                : h
-            ),
-            xp: newXp,
-            level: calcLevel(newXp),
-            totalCompleted: state.totalCompleted + (wasCompleted ? -1 : 1),
-          };
-        }),
+  addHabit: async (habit) => {
+    const userId = await getUserId();
+    if (!userId) return;
 
-      reorderHabits: (habits) => set({ habits }),
-    }),
-    {
-      name: "habit-tracker-storage",
+    await supabase.from("habits").insert({
+      user_id: userId,
+      name: habit.name,
+      category: habit.category,
+      frequency: habit.frequency,
+      custom_days: habit.customDays ?? null,
+      time_of_day: habit.timeOfDay ?? null,
+      reminder_time: habit.reminderTime ?? null,
+      sort_order: get().habits.length,
+    });
+
+    await get().fetchHabits();
+  },
+
+  updateHabit: async (id, updates) => {
+    const updateData: Record<string, unknown> = {};
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.category !== undefined) updateData.category = updates.category;
+    if (updates.frequency !== undefined) updateData.frequency = updates.frequency;
+    if (updates.customDays !== undefined) updateData.custom_days = updates.customDays;
+    if (updates.timeOfDay !== undefined) updateData.time_of_day = updates.timeOfDay;
+    if (updates.reminderTime !== undefined) updateData.reminder_time = updates.reminderTime;
+
+    await supabase.from("habits").update(updateData).eq("id", id);
+    await get().fetchHabits();
+  },
+
+  deleteHabit: async (id) => {
+    await supabase.from("habits").delete().eq("id", id);
+    await get().fetchHabits();
+  },
+
+  toggleCompletion: async (id, date) => {
+    const userId = await getUserId();
+    if (!userId) return;
+
+    const habit = get().habits.find((h) => h.id === id);
+    if (!habit) return;
+
+    const wasCompleted = habit.completions.includes(date);
+
+    if (wasCompleted) {
+      await supabase
+        .from("habit_completions")
+        .delete()
+        .eq("habit_id", id)
+        .eq("completed_date", date);
+    } else {
+      await supabase.from("habit_completions").insert({
+        habit_id: id,
+        user_id: userId,
+        completed_date: date,
+      });
     }
-  )
-);
 
-// Utility to get today's date string
+    await get().fetchHabits();
+  },
+
+  reorderHabits: (habits) => set({ habits }),
+}));
+
 export function getToday(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-// Check if habit is due on a given date
 export function isHabitDueOnDate(habit: Habit, dateStr: string): boolean {
   if (habit.frequency === "daily") return true;
   const d = new Date(dateStr);
-  if (habit.frequency === "weekly") return d.getDay() === 1; // Monday
+  if (habit.frequency === "weekly") return d.getDay() === 1;
   if (habit.frequency === "custom" && habit.customDays) {
     return habit.customDays.includes(d.getDay());
   }
   return true;
 }
 
-// XP needed for current level
 export function xpForLevel(level: number): number {
   return level * 100;
 }
@@ -181,7 +232,7 @@ export const CATEGORIES: { value: Category; label: string }[] = [
 export function getHabitSuggestions(habits: Habit[]): string[] {
   const suggestions: string[] = [];
   const categories = habits.map((h) => h.category);
-  
+
   if (categories.includes("study") && !habits.some(h => h.name.toLowerCase().includes("break"))) {
     suggestions.push("Take a study break");
   }
@@ -197,9 +248,6 @@ export function getHabitSuggestions(habits: Habit[]): string[] {
   if (!habits.some(h => h.name.toLowerCase().includes("read"))) {
     suggestions.push("Read for 20 minutes");
   }
-  if (categories.includes("productivity") && !habits.some(h => h.name.toLowerCase().includes("journal"))) {
-    suggestions.push("Evening journaling");
-  }
-  
+
   return suggestions.slice(0, 3);
 }

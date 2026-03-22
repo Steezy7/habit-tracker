@@ -9,8 +9,10 @@ import {
   Moon,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { XPBar } from "@/components/habit/XPBar";
+import { useAuth } from "@/contexts/AuthContext";
 
 type View = "today" | "calendar" | "progress";
 
@@ -30,6 +32,11 @@ const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
 export function AppLayout({ view, onViewChange, onAddHabit, children }: AppLayoutProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const { displayName, signOut } = useAuth();
+
+  const initials = displayName
+    ? displayName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)
+    : "?";
 
   function toggleDark() {
     setDarkMode(!darkMode);
@@ -45,6 +52,18 @@ export function AppLayout({ view, onViewChange, onAddHabit, children }: AppLayou
             Habit<span className="text-primary">Flow</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">Build better habits, daily.</p>
+        </div>
+
+        {/* User info */}
+        <div className="px-4 mb-3">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/50">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+              {initials}
+            </div>
+            <span className="text-sm font-semibold text-foreground truncate flex-1">
+              {displayName || "User"}
+            </span>
+          </div>
         </div>
 
         <div className="px-4 mb-4">
@@ -72,13 +91,21 @@ export function AppLayout({ view, onViewChange, onAddHabit, children }: AppLayou
             <Plus className="w-4 h-4" />
             New Habit
           </button>
-          <button
-            onClick={toggleDark}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors active:scale-95"
-          >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            {darkMode ? "Light Mode" : "Dark Mode"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={toggleDark}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors active:scale-95"
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {darkMode ? "Light" : "Dark"}
+            </button>
+            <button
+              onClick={signOut}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors active:scale-95"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -120,6 +147,16 @@ export function AppLayout({ view, onViewChange, onAddHabit, children }: AppLayou
               transition={{ type: "spring", damping: 30, stiffness: 400 }}
               className="absolute right-0 top-0 bottom-0 w-64 bg-card border-l border-border p-4 pt-20"
             >
+              {/* User info mobile */}
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/50 mb-4">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                  {initials}
+                </div>
+                <span className="text-sm font-semibold text-foreground truncate flex-1">
+                  {displayName || "User"}
+                </span>
+              </div>
+
               <div className="mb-4">
                 <XPBar />
               </div>
@@ -138,13 +175,19 @@ export function AppLayout({ view, onViewChange, onAddHabit, children }: AppLayou
                   </button>
                 ))}
               </nav>
-              <div className="mt-6">
+              <div className="mt-6 flex gap-2">
                 <button
                   onClick={toggleDark}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors active:scale-95"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors active:scale-95"
                 >
                   {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                   {darkMode ? "Light" : "Dark"}
+                </button>
+                <button
+                  onClick={signOut}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors active:scale-95"
+                >
+                  <LogOut className="w-4 h-4" />
                 </button>
               </div>
             </motion.div>

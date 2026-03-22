@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Sparkles } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -7,6 +7,7 @@ import { AddHabitModal } from "@/components/habit/AddHabitModal";
 import { CalendarView } from "@/components/habit/CalendarView";
 import { ProgressDashboard } from "@/components/habit/ProgressDashboard";
 import { useHabitStore, getToday, isHabitDueOnDate, Habit } from "@/store/habitStore";
+import { useAuth } from "@/contexts/AuthContext";
 
 type View = "today" | "calendar" | "progress";
 
@@ -22,7 +23,13 @@ export default function Index() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editHabit, setEditHabit] = useState<Habit | null>(null);
   const habits = useHabitStore((s) => s.habits);
+  const fetchHabits = useHabitStore((s) => s.fetchHabits);
+  const { displayName } = useAuth();
   const today = getToday();
+
+  useEffect(() => {
+    fetchHabits();
+  }, [fetchHabits]);
 
   const todaysHabits = habits.filter((h) => isHabitDueOnDate(h, today));
   const completedCount = todaysHabits.filter((h) => h.completions.includes(today)).length;
@@ -39,6 +46,8 @@ export default function Index() {
     setEditHabit(null);
   }
 
+  const greeting = displayName ? `Hey ${displayName}! 👋` : "Welcome! 👋";
+
   return (
     <AppLayout view={view} onViewChange={setView} onAddHabit={() => setModalOpen(true)}>
       <AnimatePresence mode="wait">
@@ -52,10 +61,18 @@ export default function Index() {
           >
             {/* Header */}
             <div className="mb-8">
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="text-sm font-semibold text-primary mb-1"
+              >
+                {greeting}
+              </motion.p>
               <motion.h2
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.5, delay: 0.05 }}
                 className="text-2xl font-extrabold tracking-tight text-foreground text-balance"
               >
                 {new Date().toLocaleDateString("en-US", {
