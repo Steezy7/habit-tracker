@@ -14,7 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      habit_completions: {
+        Row: {
+          completed_date: string
+          created_at: string
+          habit_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          completed_date: string
+          created_at?: string
+          habit_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          completed_date?: string
+          created_at?: string
+          habit_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_completions_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      habits: {
+        Row: {
+          category: string
+          created_at: string
+          custom_days: number[] | null
+          frequency: string
+          id: string
+          name: string
+          reminder_time: string | null
+          sort_order: number
+          time_of_day: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          custom_days?: number[] | null
+          frequency?: string
+          id?: string
+          name: string
+          reminder_time?: string | null
+          sort_order?: number
+          time_of_day?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          custom_days?: number[] | null
+          frequency?: string
+          id?: string
+          name?: string
+          reminder_time?: string | null
+          sort_order?: number
+          time_of_day?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
