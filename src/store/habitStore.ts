@@ -135,7 +135,7 @@ export const useHabitStore = create<HabitState>()((set, get) => ({
     const userId = await getUserId();
     if (!userId) return;
 
-    await supabase.from("habits").insert({
+    const { data: newHabit } = await supabase.from("habits").insert({
       user_id: userId,
       name: habit.name,
       category: habit.category,
@@ -144,9 +144,26 @@ export const useHabitStore = create<HabitState>()((set, get) => ({
       time_of_day: habit.timeOfDay ?? null,
       reminder_time: habit.reminderTime ?? null,
       sort_order: get().habits.length,
-    });
+    }).select().single();
 
-    await get().fetchHabits();
+    if (newHabit) {
+      set({
+        habits: [...get().habits, {
+          id: newHabit.id,
+          name: newHabit.name,
+          category: newHabit.category as Category,
+          frequency: newHabit.frequency as Frequency,
+          customDays: newHabit.custom_days ?? undefined,
+          timeOfDay: newHabit.time_of_day ?? undefined,
+          reminderTime: newHabit.reminder_time ?? undefined,
+          createdAt: newHabit.created_at,
+          completions: [],
+          streak: 0,
+          longestStreak: 0,
+          order: newHabit.sort_order,
+        }]
+      });
+    }
   },
 
   updateHabit: async (id, updates) => {
