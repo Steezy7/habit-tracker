@@ -21,7 +21,7 @@ export default function Auth() {
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success("Account created! Check your email to confirm.");
+        toast.success("Account created! Sign in to continue.");
       }
     } else {
       const { error } = await signIn(email, password);
